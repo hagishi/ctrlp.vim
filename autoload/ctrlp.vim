@@ -88,6 +88,8 @@ let [s:pref, s:bpref, s:opts, s:new_opts, s:lc_opts] =
 	\ 'use_migemo':            ['s:migemo', 0],
 	\ 'user_command':          ['s:usrcmd', ''],
 	\ 'working_path_mode':     ['s:pathmode', 'ra'],
+	\ 'preview_enabled':       ['s:previewenabled', []],
+	\ 'preview_heights':       ['s:previewheights', 10],
 	\ }, {
 	\ 'open_multiple_files':   's:opmul',
 	\ 'regexp':                's:regexp',
@@ -267,7 +269,7 @@ fu! s:Close()
 	if winnr('$') == 1
 		bw!
 	el
-		try | bun!
+		try | bun! | if exists('s:prvbufnr') | exe 'bun! ' . s:prvbufnr | unlet s:prvbufnr | en
 		cat | clo! | endt
 		cal s:unmarksigns()
 	en
@@ -575,6 +577,8 @@ fu! s:BuildPrompt(upd)
 	if empty(prt[1]) && s:focus
 		exe 'echoh' hibase '| echon "_" | echoh None'
 	en
+
+  call s:OpenPreview()
 endf
 " - SetDefTxt() {{{1
 fu! s:SetDefTxt()
@@ -731,7 +735,76 @@ fu! s:PrtSelectMove(dir)
 	exe 'keepj norm!' dirs[a:dir]
 	if s:nolim != 1 | let s:cline = line('.') | en
 	if line('$') > winheight(0) | cal s:BuildPrompt(0) | en
+  call s:OpenPreview()
 endf
+
+fu! s:OpenPreview()
+  if index(s:previewenabled, s:ctype) == -1 | retu | en
+
+  " if exists('s:prvlinenr') && s:prvlinenr == line('.') | retu | en
+	let line = ctrlp#getcline()
+  let prvheight = get(s:previewheights, s:ctype, 10)
+  let prvbufname = '-ControlPP-'
+  let previewables = ['files', 'mru files', 'tags']
+
+  if index(previewables, s:ctype) == -1
+    return
+  endif
+
+  noau exe bufwinnr(s:crbufnr) . 'wincmd w'
+
+  if !exists('s:prvbufnr') || !bufexists(s:prvbufnr)
+    exe 'silent keepa topleft ' . prvheight . 'new ' . prvbufname
+    let s:prvbufnr = bufnr(prvbufname)
+    cal setbufvar(s:prvbufnr, '&buftype', 'nofile')
+    cal setbufvar(s:prvbufnr, '&buflisted', 0)
+  elsei bufwinnr(s:prvbufnr) == -1
+    exe 'silent keepa topleft ' . prvheight . 'sp +b' . prvbufname
+  en
+
+  let prvwinnr = bufwinnr(s:prvbufnr)
+
+  let s:prvlinenr = line('.')
+  exe 'keepj ' . prvwinnr . 'wincmd w'
+
+  cal setwinvar(prvwinnr, '&cul', 0)
+  cal setbufvar(s:prvbufnr, '&ft', '')
+  exe '%delete _'
+
+  let prvinfo = { 'line': line,
+                \ 'prvwinnr': prvwinnr,
+                \ 'prvheight': prvheight }
+
+  if !empty(line)
+    if s:ctype == 'files'
+      " NOTE: s:dyncwd is always set?
+      let path = s:dyncwd . '/' . line
+      if filereadable(path) | sil 0 put = readfile(path)[0:prvheight] | en
+      cal cursor(1, 1)
+    elsei s:ctype == 'mru files'
+      call ctrlp#mrufiles#preview(prvinfo)
+      let path = ctrlp#mrufiles#path(line)
+      cal cursor(1, 1)
+    elsei s:ctype == 'tags'
+      call ctrlp#tag#preview(prvinfo)
+      let path = ctrlp#tag#path(line)
+    en
+
+    if has('autocmd')
+      exe 'doau filetypedetect BufRead ' . path
+    en
+
+    cal setbufvar(s:prvbufnr, '&ma', 1)
+    cal setwinvar(prvwinnr, '&fen', 0)
+  en
+
+  exe 'keepj ' . bufwinnr(s:bufnr) . 'wincmd w'
+endf
+
+fu! s:PrvFunc(line)
+  let prvwinnr = bufwinnr(s:prvbufnr)
+  let prvheight = get(s:previewheights, s:ctype, 10)
+endfu
 
 fu! s:PrtSelectJump(char)
 	let lines = copy(s:lines)
