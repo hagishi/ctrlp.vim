@@ -269,7 +269,8 @@ fu! s:Close()
 	if winnr('$') == 1
 		bw!
 	el
-		try | bun! | if exists('s:prvbufnr') && bufloaded(s:prvbufnr) | exe 'bun! ' . s:prvbufnr | en
+    if exists('s:prvbufnr') && bufloaded(s:prvbufnr) | exe 'bun! '. s:prvbufnr | en
+    try | bun!
 		cat | clo! | endt
 		cal s:unmarksigns()
 	en
